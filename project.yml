@@ -25,6 +25,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
     dependencies:
       - target: NineGridKeyboardExt
+        embed: true
   NineGridKeyboardExt:
     type: app-extension
     platform: iOS

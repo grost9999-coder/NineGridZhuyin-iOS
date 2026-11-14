@@ -16,6 +16,8 @@ jobs:
         run: |
           swiftc -parse-as-library Shared/ZhuyinEngine.swift Shared/PhoneticLexicon.swift tests/EngineTests.swift -o /tmp/engine_tests
           /tmp/engine_tests
+      - name: Optionally expand open-licensed word dictionary
+        run: python3 scripts/build_lexicon.py || echo "Retaining offline seed dictionary"
       - name: Generate Xcode project
         run: xcodegen generate
       - name: Build unsigned simulator app and keyboard extension

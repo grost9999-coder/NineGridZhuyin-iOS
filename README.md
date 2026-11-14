@@ -9,7 +9,7 @@
 - 數字及基本英文字母切換、地球儀切換鍵盤。
 - 使用 Apple 的 `UITextDocumentProxy` 將文字輸入 LINE、備忘錄及其他允許第三方鍵盤的輸入欄。
 - `RequestsOpenAccess=false`，不需要完整取用權限，沒有網路傳送或蒐集輸入資料的程式碼。
-- 目前 GitHub 版本包含**小型初始字詞庫**。較大的約 2,000 筆離線詞庫仍保留在先前 ChatGPT 對話提供的 Xcode ZIP 中，尚待同步；此版本不是已具商用預測選字品質的鍵盤。
+- 目前 GitHub 版本包含**小型初始字詞庫**。較大的離線詞庫可以在 GitHub Actions 或本機使用 `python3 scripts/build_lexicon.py` 從 MIT 授權開放資料擴充；如果下載失敗則保留小型離線詞庫；此版本不是已具商用預測選字品質的鍵盤。
 
 ## 編譯
 

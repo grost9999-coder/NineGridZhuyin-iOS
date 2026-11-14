@@ -1,0 +1,23 @@
+name: iOS simulator build
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Test offline input engine
+        run: |
+          swiftc -parse-as-library Shared/ZhuyinEngine.swift Shared/PhoneticLexicon.swift tests/EngineTests.swift -o /tmp/engine_tests
+          /tmp/engine_tests
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Build unsigned simulator app and keyboard extension
+        run: |
+          xcodebuild -project NineGridZhuyin.xcodeproj -scheme NineGridZhuyin -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build

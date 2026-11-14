@@ -1,0 +1,6 @@
+# XcodeGen output
+NineGridZhuyin.xcodeproj/
+DerivedData/
+build/
+*.xcuserstate
+.DS_Store

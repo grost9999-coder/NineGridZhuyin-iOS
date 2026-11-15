@@ -122,7 +122,7 @@ do {
     var mapping: [String: String] = [:]
     for (bundle, name) in names {
         let lookup = try api("GET", "bundleIds?filter%5Bidentifier%5D=\(bundle)")
-        guard let rows = lookup["data"] as? [[String: Any]], let bundleID = rows.first?["id"] as? String
+        guard let rows = lookup["data"] as? [[String: Any]], let bundleID = rows.first(where: { ($0["attributes"] as? [String: Any])?["identifier"] as? String == bundle })?["id"] as? String
         else { throw NSError(domain: "App ID missing", code: 1) }
         let profileName = "\(name)-\(env["GITHUB_RUN_ID"]!)-\(env["GITHUB_RUN_ATTEMPT"]!)"
         let created = try api("POST", "profiles", ["data": [

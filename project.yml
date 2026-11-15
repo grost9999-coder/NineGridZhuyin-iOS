@@ -18,6 +18,7 @@ targets:
       - path: App
     settings:
       base:
+        TARGETED_DEVICE_FAMILY: "1"
         PRODUCT_BUNDLE_IDENTIFIER: com.grost9999.ninegridzhuyin
         INFOPLIST_FILE: App/Info.plist
         GENERATE_INFOPLIST_FILE: NO
@@ -35,6 +36,7 @@ targets:
       - path: Shared
     settings:
       base:
+        TARGETED_DEVICE_FAMILY: "1"
         PRODUCT_BUNDLE_IDENTIFIER: com.grost9999.ninegridzhuyin.keyboard
         INFOPLIST_FILE: Keyboard/Info.plist
         GENERATE_INFOPLIST_FILE: NO

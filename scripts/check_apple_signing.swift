@@ -46,6 +46,20 @@ let checks = [
     Check(title: "Provisioning API - profiles", url: "https://api.appstoreconnect.apple.com/v1/profiles?limit=1", mustContainRecord: false)
 ]
 
+// Check for accidental spaces/newlines and malformed identifier lengths without printing secrets.
+let rawKeyID = env["ASC_KEY_ID"]!
+let rawIssuerID = env["ASC_ISSUER_ID"]!
+if rawKeyID != rawKeyID.trimmingCharacters(in: .whitespacesAndNewlines) ||
+   rawKeyID.count != 10 {
+    print("FAIL: ASC_KEY_ID must be the exact 10-character Apple Team API Key ID with no spaces or trailing newline")
+    exit(1)
+}
+if rawIssuerID != rawIssuerID.trimmingCharacters(in: .whitespacesAndNewlines) ||
+   UUID(uuidString: rawIssuerID) == nil {
+    print("FAIL: ASC_ISSUER_ID must be the UUID from Apple App Store Connect Team Keys, with no extra whitespace")
+    exit(1)
+}
+
 let session = URLSession(configuration: .ephemeral)
 var failures = 0
 for check in checks {

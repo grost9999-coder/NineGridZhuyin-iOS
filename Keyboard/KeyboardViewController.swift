@@ -15,6 +15,7 @@ final class KeyboardViewController: UIInputViewController {
     private var expanded = false
     private var uppercase = false
     private var emojiCategory = 0
+    private var emojiPage = 0
     private var lastCommit: Commit?
     private var deleteTimer: Timer?
     private let typedLabel = UILabel()
@@ -247,13 +248,16 @@ final class KeyboardViewController: UIInputViewController {
                                              foreground: index == emojiCategory ? .white : .label, size: 13) { [weak self] in
                     guard let self else { return }
                     self.emojiCategory = index
+                    self.emojiPage = 0
                     self.renderKeys()
                     self.refreshCandidates()
                 })
             }
             tools.addArrangedSubview(deleteKey())
             let recent = UserDefaults.standard.stringArray(forKey: "recent-emoji") ?? []
-            let values = emojiCategory == 0 && !recent.isEmpty ? recent : emojiPages[emojiCategory]
+            let all = emojiCategory == 0 && !recent.isEmpty ? recent : emojiPages[emojiCategory]
+            emojiPage = min(emojiPage, (all.count - 1) / 18)
+            let values = Array(all[(emojiPage * 18)..<min(emojiPage * 18 + 18, all.count)])
             for start in stride(from: 0, to: values.count, by: 6) {
                 let row = makeRow()
                 for value in values[start..<min(start + 6, values.count)] {
@@ -298,8 +302,24 @@ final class KeyboardViewController: UIInputViewController {
                 self?.selectedGroup = nil
                 self?.refreshCandidates()
             })
+        } else if mode == .emoji {
+            candidates = []
+            typedLabel.text = "表情符號 · " + emojiCategories[emojiCategory]
+            let recent = UserDefaults.standard.stringArray(forKey: "recent-emoji") ?? []
+            let count = emojiCategory == 0 && !recent.isEmpty ? recent.count : emojiPages[emojiCategory].count
+            let pages = (count + 17) / 18
+            for (title, offset) in [("◀︎", -1), ("\(emojiPage + 1) / \(pages)", 0), ("▶︎", 1)] {
+                let button = candidateButton(title, first: false) { [weak self] in
+                    guard let self else { return }
+                    self.emojiPage = (self.emojiPage + offset + pages) % pages
+                    self.renderKeys()
+                    self.refreshCandidates()
+                }
+                button.isEnabled = offset != 0 && pages > 1
+                candidateStack.addArrangedSubview(button)
+            }
         } else {
-            candidates = input.isEmpty ? lexicon.suggestions(after: context) : lexicon.candidates(for: input.keys, context: context)
+            candidates = input.isEmpty ? (mode == .zhuyin ? lexicon.suggestions(after: context) : []) : lexicon.candidates(for: input.keys, context: context)
             typedLabel.text = input.isEmpty
                 ? (mode == .zhuyin ? "直接連打 · 長按指定注音" : mode == .english ? "英文 QWERTY" : mode == .emoji ? "表情符號 · " + emojiCategories[emojiCategory] : "數字與符號")
                 : candidates.first?.reading ?? "尚無符合字詞 · 長按大鍵指定注音"
@@ -409,11 +429,13 @@ final class KeyboardViewController: UIInputViewController {
         return button
     }
     @objc private func repeatDelete(_ gesture: UILongPressGestureRecognizer) {
-        deleteTimer?.invalidate()
-        deleteTimer = nil
         if gesture.state == .began {
+            deleteTimer?.invalidate()
             backspace()
             deleteTimer = Timer.scheduledTimer(withTimeInterval: 0.09, repeats: true) { [weak self] _ in self?.backspace() }
+        } else if gesture.state == .ended || gesture.state == .cancelled || gesture.state == .failed {
+            deleteTimer?.invalidate()
+            deleteTimer = nil
         }
     }
     @objc private func moveCursor(_ gesture: UIPanGestureRecognizer) {

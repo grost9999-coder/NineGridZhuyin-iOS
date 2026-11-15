@@ -1,0 +1,151 @@
+name: iPhone archive and TestFlight
+on:
+  workflow_dispatch:
+    inputs:
+      upload_to_testflight:
+        description: "Upload signed IPA to App Store Connect / TestFlight"
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ninegrid-testflight
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Sign iPhone app and keyboard extension
+    runs-on: macos-26
+    timeout-minutes: 65
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Apple credentials and write private API key
+        shell: bash
+        env:
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          for name in APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_API_KEY_P8; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
+          umask 077
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s\n' "$ASC_API_KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          if ! grep -q -- "BEGIN PRIVATE KEY" "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"; then
+            echo "::error::ASC_API_KEY_P8 must contain the text of your .p8 key, not its filename."
+            exit 1
+          fi
+          echo "Apple signing key prepared (contents are never printed)."
+
+      - name: Confirm Xcode 26 or newer
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          MAJOR="$(xcodebuild -version | awk '/^Xcode /{split($2,p,"."); print p[1]}')"
+          if [[ -z "$MAJOR" || "$MAJOR" -lt 26 ]]; then
+            echo "::error::App Store Connect requires an Xcode 26+ iOS build."
+            exit 1
+          fi
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Test offline Zhuyin input engine
+        run: |
+          swiftc -parse-as-library Shared/ZhuyinEngine.swift Shared/PhoneticLexicon.swift tests/EngineTests.swift -o "$RUNNER_TEMP/ninegrid-tests"
+          "$RUNNER_TEMP/ninegrid-tests"
+
+      - name: Generate App Store icon
+        run: swift scripts/generate_icon.swift
+
+      - name: Expand offline word dictionary when source is available
+        run: python3 scripts/build_lexicon.py || echo "::warning::Offline seed dictionary retained"
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Archive signed iPhone app with embedded keyboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD_NUMBER=$(( GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT ))
+          KEY="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          xcodebuild \
+            -project NineGridZhuyin.xcodeproj \
+            -scheme NineGridZhuyin \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/NineGridZhuyin.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            archive
+
+      - name: Export signed IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>export</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$RUNNER_TEMP/NineGridZhuyin.xcarchive" \
+            -exportPath "$RUNNER_TEMP/NineGridIPA" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          ls -lh "$RUNNER_TEMP/NineGridIPA/"*.ipa
+
+      - name: Preserve signed IPA for debugging
+        uses: actions/upload-artifact@v4
+        with:
+          name: NineGridZhuyin-signed-ipa
+          path: ${{ runner.temp }}/NineGridIPA/*.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload signed IPA to TestFlight
+        if: ${{ inputs.upload_to_testflight }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          IPA="$(find "$RUNNER_TEMP/NineGridIPA" -maxdepth 1 -name '*.ipa' -type f -print -quit)"
+          test -n "$IPA"
+          xcrun altool --upload-app -t ios -f "$IPA" \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+
+      - name: Remove API private key from runner
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${ASC_KEY_ID:-}" ]]; then
+            rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          fi

@@ -7,7 +7,7 @@ struct ZhuyinEngine {
         ["ㄑ","ㄒ","ㄓ","ㄔ"], ["ㄕ","ㄖ","ㄗ","ㄘ","ㄙ"], ["ㄧ","ㄨ","ㄩ"],
         ["ㄚ","ㄛ","ㄜ","ㄝ"], ["ㄞ","ㄟ","ㄠ","ㄡ"], ["ㄢ","ㄣ","ㄤ","ㄥ","ㄦ"]
     ]
-    static let tones = ["˙","ˊ","ˇ","ˋ"]
+    static let tones = ["ˉ","ˊ","ˇ","ˋ","˙"]
     private static let initials = Set("ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙ".map(String.init))
     private static let vowels = Set("ㄧㄨㄩㄚㄛㄜㄝㄞㄟㄠㄡㄢㄣㄤㄥㄦ".map(String.init))
     private var complete: [String] = []
@@ -41,3 +41,4 @@ struct ZhuyinEngine {
     mutating func commit(_ text: String) -> String { clear(); return text }
     mutating func clear() { complete = []; active = [] }
 }
+

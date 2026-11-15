@@ -1,5 +1,6 @@
 #!/usr/bin/env swift
 import AppKit
+import CoreGraphics
 import Foundation
 
 // Produce an opaque 1024×1024 PNG required by App Store Connect.
@@ -8,20 +9,19 @@ let destination = CommandLine.arguments.dropFirst().first
     ?? "App/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
 
 let side = 1024
-guard let bitmap = NSBitmapImageRep(
-    bitmapDataPlanes: nil,
-    pixelsWide: side,
-    pixelsHigh: side,
-    bitsPerSample: 8,
-    samplesPerPixel: 3,
-    hasAlpha: false,
-    isPlanar: false,
-    colorSpaceName: .deviceRGB,
-    bytesPerRow: 0,
-    bitsPerPixel: 0
-), let context = NSGraphicsContext(bitmapImageRep: bitmap) else {
-    fatalError("Cannot create an opaque RGB bitmap")
+// CoreGraphics RGBX bitmap draws reliably on Apple Silicon and stores no alpha.
+guard let bitmapContext = CGContext(
+    data: nil,
+    width: side,
+    height: side,
+    bitsPerComponent: 8,
+    bytesPerRow: side * 4,
+    space: CGColorSpaceCreateDeviceRGB(),
+    bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+) else {
+    fatalError("Cannot create an opaque CoreGraphics bitmap")
 }
+let context = NSGraphicsContext(cgContext: bitmapContext, flipped: false)
 
 NSGraphicsContext.saveGraphicsState()
 NSGraphicsContext.current = context
@@ -57,8 +57,9 @@ NSGraphicsContext.restoreGraphicsState()
 let url = URL(fileURLWithPath: destination)
 try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                         withIntermediateDirectories: true)
-guard let png = bitmap.representation(using: .png, properties: [:]) else {
-    fatalError("Failed to encode icon PNG")
+guard let image = bitmapContext.makeImage(),
+      let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
+    fatalError("Failed to encode opaque icon PNG")
 }
 try png.write(to: url)
 print("Generated opaque 1024×1024 App icon: \(destination)")

@@ -44,7 +44,7 @@ open NineGridZhuyin.xcodeproj
    - 鍵盤擴充：`com.grost9999.ninegridzhuyin.keyboard`
    注意 `grost9999` 是 **四個 9**。如果已註冊就不要重複新增。主 App ID 未註冊時不能只靠鍵盤擴充 ID 發佈。
 2. 在 [App Store Connect](https://appstoreconnect.apple.com/apps) 新增 iOS App「九宮格注音」，Bundle ID 選主 App `com.grost9999.ninegridzhuyin`。鍵盤擴充功能不用另建 App Store Connect 應用程式。
-3. 在 App Store Connect → 使用者與存取權限 → 整合 → App Store Connect API 取得具有適當權限的 API key（Key ID、Issuer ID、一次性下載的 `.p8`）。不要在 GitHub 公開檔案或聊天貼出私鑰。
+3. 在 App Store Connect → 使用者與存取權限 → 整合 → App Store Connect API → **Team Keys（團隊金鑰）** 取得可用於簽署及發佈的 API key（Key ID、Issuer ID、一次性下載的 `.p8`），建議以 App Manager 權限起步並視簽署需求調整。**不能使用 Individual API Key**，因為 Apple 限制個人金鑰存取 Provisioning API。不要在 GitHub 公開檔案或聊天貼出私鑰。
 4. 在本專案 GitHub → Settings → Secrets and variables → Actions → New repository secret 設定：
    - `APPLE_TEAM_ID`：Apple Developer 的 10 碼 Team ID
    - `ASC_KEY_ID`：App Store Connect API Key ID

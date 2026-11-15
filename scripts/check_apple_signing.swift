@@ -101,7 +101,17 @@ for check in checks {
             print("PASS: \(check.title) - HTTP 200")
         }
     } else if status == 401 {
-        print("FAIL: \(check.title) - HTTP 401: check API key ID, issuer ID, matching private key, revoked keys, and team")
+        // Never display an untrusted response body. Show a short verified code only.
+        var code = "UNKNOWN"
+        if let data = returnedData,
+           let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+           let errors = root["errors"] as? [[String: Any]],
+           let candidate = errors.first?["code"] as? String,
+           !candidate.isEmpty, candidate.count <= 64,
+           candidate.allSatisfy({ $0.isASCII && ($0.isUppercase || $0.isNumber || $0 == "_" || $0 == "-") }) {
+            code = candidate
+        }
+        print("FAIL: \\(check.title) - HTTP 401 (Apple error code: \\(code)). Verify Team API Key ID, the matching .p8 file and team Issuer ID.")
         failures += 1
     } else if status == 403 {
         print("FAIL: \(check.title) - HTTP 403: key lacks access to this resource; review team key role and Apple Developer signing privileges")

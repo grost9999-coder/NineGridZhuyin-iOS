@@ -136,7 +136,9 @@ final class KeyboardViewController: UIInputViewController {
         bottom.addArrangedSubview(globe)
         configure(languageButton, title: "中/英", width: 45, label: "切換中文或英文") { [weak self] in
             guard let self else { return }
-            self.switchMode(self.previousLanguage == .english ? .zhuyin : .english)
+            if self.mode == .zhuyin { self.switchMode(.english) }
+            else if self.mode == .english { self.switchMode(.zhuyin) }
+            else { self.switchMode(self.previousLanguage) }
         }
         bottom.addArrangedSubview(languageButton)
         configure(numberButton, title: "123", width: 43, label: "切換數字與符號") { [weak self] in
@@ -273,7 +275,7 @@ final class KeyboardViewController: UIInputViewController {
                 grid.addArrangedSubview(row)
             }
         }
-        languageButton.setTitle(mode == .zhuyin ? "英" : "中文", for: .normal)
+        languageButton.setTitle(mode == .zhuyin ? "英" : mode == .english ? "中文" : previousLanguage == .zhuyin ? "中文" : "ABC", for: .normal)
         numberButton.setTitle(mode == .numbers ? "#+=" : "123", for: .normal)
         spaceButton.setTitle(mode == .numbers ? "0" : input.isEmpty ? "空白" : "選字", for: .normal)
         spaceButton.accessibilityHint = "左右滑動可移動文字游標"

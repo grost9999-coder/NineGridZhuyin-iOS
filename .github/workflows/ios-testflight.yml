@@ -88,6 +88,11 @@ jobs:
       - name: Expand offline word dictionary when source is available
         run: python3 scripts/build_lexicon.py || echo "::warning::Offline seed dictionary retained"
 
+      - name: Prepare manual App Store signing
+        env:
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+        run: swift scripts/prepare_app_store_signing.swift
+
       - name: Generate Xcode project
         run: xcodegen generate
 
@@ -103,7 +108,6 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/NineGridZhuyin.xcarchive" \
-            -allowProvisioningUpdates \
             -authenticationKeyPath "$KEY" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
@@ -115,25 +119,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key><string>app-store-connect</string>
-            <key>destination</key><string>export</string>
-            <key>teamID</key><string>$APPLE_TEAM_ID</string>
-            <key>signingStyle</key><string>automatic</string>
-            <key>manageAppVersionAndBuildNumber</key><false/>
-          </dict>
-          </plist>
-          EOF
           xcodebuild \
             -exportArchive \
             -archivePath "$RUNNER_TEMP/NineGridZhuyin.xcarchive" \
             -exportPath "$RUNNER_TEMP/NineGridIPA" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            -allowProvisioningUpdates \
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
@@ -156,6 +146,12 @@ jobs:
           test -n "$IPA"
           xcrun altool --upload-app -t ios -f "$IPA" \
             --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+
+      - name: Clean up temporary signing resources
+        if: always()
+        env:
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+        run: swift scripts/prepare_app_store_signing.swift --cleanup
 
       - name: Remove API private key from runner
         if: always()

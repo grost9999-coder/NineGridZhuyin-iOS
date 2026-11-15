@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 @main struct EngineTests {
     static func main() {
         let symbols = ZhuyinEngine.groups.flatMap{$0}
@@ -44,6 +45,23 @@ import Foundation
         let restored = PhoneticLexicon(text: "", defaults: defaults)
         assert(restored.candidates(for: yao).first?.word == "藥")
         defaults.removePersistentDomain(forName: suite)
+        if CommandLine.arguments.count > 1 {
+            let text = try! String(contentsOfFile: CommandLine.arguments[1], encoding: .utf8)
+            let started = Date()
+            let full = PhoneticLexicon(text: text)
+            let loaded = Date()
+            var longest = 0.0
+            for keys in [greeting, sentence, yao, Array(repeating: ZhuyinKey.group(5), count: 12)] {
+                let begin = Date()
+                _ = full.candidates(for: keys)
+                longest = max(longest, Date().timeIntervalSince(begin))
+            }
+            assert(full.candidates(for: ["ㄋㄧˇ", "ㄏㄠˇ"]).contains { $0.word == "你好" })
+            var usage = rusage()
+            getrusage(RUSAGE_SELF, &usage)
+            print("Full lexicon rows: \(text.split(whereSeparator: \.isNewline).count), load seconds: \(loaded.timeIntervalSince(started)), maximum query seconds: \(longest), peak MiB: \(Double(usage.ru_maxrss) / 1048576)")
+            assert(longest < 1.0, "Typing queries must remain responsive")
+        }
         print("PASS: ambiguous keys, continuous phrases, tones, completion, corrections, contextual learning, persistence, delete")
     }
 }

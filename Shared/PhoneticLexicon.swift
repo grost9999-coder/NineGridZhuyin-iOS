@@ -21,6 +21,18 @@ enum ZhuyinKey: Equatable {
 struct SmartZhuyinInput {
     private(set) var keys: [ZhuyinKey] = []
     var isEmpty: Bool { keys.isEmpty }
+    /// The 3x3 grid doubles as a number pad: grid key n is digit n, so a run of
+    /// plain group presses can also be committed as digits. Nil once a tone or a
+    /// specified symbol is involved.
+    var digitText: String? {
+        guard !keys.isEmpty else { return nil }
+        var digits = ""
+        for key in keys {
+            guard case .group(let index) = key else { return nil }
+            digits += String(index + 1)
+        }
+        return digits
+    }
     var display: String {
         keys.map {
             switch $0 {
@@ -53,6 +65,8 @@ struct LexiconCandidate {
     let score: Int
     var completesInput = false
     var corrected = false
+    /// True for the digit-string candidate offered next to real words.
+    var literal = false
 }
 
 /// Group signatures keep the expanded lexicon compact enough for a keyboard extension.

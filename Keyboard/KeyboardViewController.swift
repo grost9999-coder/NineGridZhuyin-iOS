@@ -13,7 +13,17 @@ final class KeyboardViewController: UIInputViewController {
     private var candidates: [LexiconCandidate] = []
     private var selectedGroup: Int?
     private var expanded = false
-    private var uppercase = false
+    private enum Shift { case off, once, locked }
+    private var shift: Shift = .off
+    private var lastShiftTap = Date.distantPast
+    private var lastSpaceTime = Date.distantPast
+    private var symbolPage = 0
+    private let spellChecker = UITextChecker()
+    private var uppercase: Bool { shift != .off }
+    private static let symbolPages: [[[String]]] = [
+        [["!", "?", "@", "#", "$", "%"], ["^", "&", "*", "(", ")", "_"], ["-", "+", "=", "/", "~"]],
+        [["[", "]", "{", "}", "<", ">"], ["|", "\\", "\"", "'", ";", "`"], ["（", "）", "「", "」", "…"]]
+    ]
     private var emojiCategory = 0
     private var emojiPage = 0
     private var lastCommit: Commit?
@@ -61,7 +71,11 @@ final class KeyboardViewController: UIInputViewController {
         if let commit = lastCommit, !(textDocumentProxy.documentContextBeforeInput ?? "").hasSuffix(commit.text) {
             lastCommit = nil
         }
-        if isViewLoaded { refreshCandidates() }
+        if isViewLoaded {
+            // Context can lag behind our own edits; re-check sentence capitalisation once it settles.
+            if mode == .english, Date().timeIntervalSince(lastShiftTap) > 1.5 { applyAutoShift() }
+            refreshCandidates()
+        }
     }
     private func build() {
         let height = view.heightAnchor.constraint(equalToConstant: 330)
@@ -215,16 +229,18 @@ final class KeyboardViewController: UIInputViewController {
                 grid.addArrangedSubview(row)
             }
         case .english:
-            for value in ["'", "\"", "@", "-", ".", ","] { addTool(value) }
+            for value in ["'", "\"", "@", "-", ".", ",", "?"] { addTool(value) }
             tools.addArrangedSubview(deleteKey())
             for letters in ["qwertyuiop", "asdfghjkl", "zxcvbnm"] {
                 let row = makeRow()
                 if letters == "zxcvbnm" {
-                    row.addArrangedSubview(key(uppercase ? "⇧●" : "⇧", tint: secondaryBackground, size: 17) { [weak self] in
-                        guard let self else { return }
-                        self.uppercase.toggle()
-                        self.renderKeys()
-                    })
+                    let shiftTitle = shift == .locked ? "⇪" : shift == .once ? "⇧●" : "⇧"
+                    let shiftKey = key(shiftTitle, tint: shift == .locked ? .systemBlue : secondaryBackground,
+                                       foreground: shift == .locked ? .white : .label, size: 17) { [weak self] in
+                        self?.shiftPressed()
+                    }
+                    shiftKey.accessibilityLabel = "大小寫，連點兩下鎖定大寫"
+                    row.addArrangedSubview(shiftKey)
                 }
                 for character in letters {
                     let letter = uppercase ? String(character).uppercased() : String(character)
@@ -233,15 +249,30 @@ final class KeyboardViewController: UIInputViewController {
                 if letters == "zxcvbnm" { row.addArrangedSubview(deleteKey()) }
                 grid.addArrangedSubview(row)
             }
-        case .numbers, .symbols:
-            for value in mode == .numbers ? [".", ",", "-", "+", "/", ":", "%"] : ["，", "。", "！", "？", "、", "：", "；"] { addTool(value) }
+        case .numbers:
+            for value in ["-", "+", "/", ":", "%", "$", "@"] { addTool(value) }
             tools.addArrangedSubview(deleteKey())
-            let pages = mode == .numbers
-                ? [["1","2","3"],["4","5","6"],["7","8","9"]]
-                : [["!","?","@"],["(",")","#"],["$","&","="]]
-            for values in pages {
+            for values in [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["00", "0", "."]] {
                 let row = makeRow()
-                for value in values { row.addArrangedSubview(key(value, tint: keyBackground, size: 25) { [weak self] in self?.insertLiteral(value) }) }
+                for value in values { row.addArrangedSubview(key(value, tint: keyBackground, size: 24) { [weak self] in self?.insertLiteral(value) }) }
+                grid.addArrangedSubview(row)
+            }
+        case .symbols:
+            for value in ["，", "。", "！", "？", "、", "：", "；"] { addTool(value) }
+            tools.addArrangedSubview(deleteKey())
+            let page = Self.symbolPages[symbolPage]
+            for (rowIndex, values) in page.enumerated() {
+                let row = makeRow()
+                for value in values { row.addArrangedSubview(key(value, tint: keyBackground, size: 22) { [weak self] in self?.insertLiteral(value) }) }
+                if rowIndex == page.count - 1 {
+                    let pageKey = key("\(symbolPage + 1)/\(Self.symbolPages.count)", tint: secondaryBackground, size: 16) { [weak self] in
+                        guard let self else { return }
+                        self.symbolPage = (self.symbolPage + 1) % Self.symbolPages.count
+                        self.renderKeys()
+                    }
+                    pageKey.accessibilityLabel = "切換符號頁面"
+                    row.addArrangedSubview(pageKey)
+                }
                 grid.addArrangedSubview(row)
             }
         case .emoji:
@@ -277,7 +308,7 @@ final class KeyboardViewController: UIInputViewController {
         }
         languageButton.setTitle(mode == .zhuyin ? "英" : mode == .english ? "中文" : previousLanguage == .zhuyin ? "中文" : "ABC", for: .normal)
         numberButton.setTitle(mode == .numbers ? "#+=" : "123", for: .normal)
-        spaceButton.setTitle(mode == .numbers ? "0" : input.isEmpty ? "空白" : "選字", for: .normal)
+        spaceButton.setTitle(input.isEmpty ? "空白" : "選字", for: .normal)
         spaceButton.accessibilityHint = "左右滑動可移動文字游標"
     }
     private func makeRow() -> UIStackView {
@@ -320,22 +351,35 @@ final class KeyboardViewController: UIInputViewController {
                 button.isEnabled = offset != 0 && pages > 1
                 candidateStack.addArrangedSubview(button)
             }
+        } else if mode == .english && input.isEmpty {
+            candidates = []
+            let words = englishSuggestions()
+            typedLabel.text = words.isEmpty ? "英文 QWERTY · 連點空白輸入句點" : "英文字詞建議"
+            for (index, word) in words.enumerated() {
+                candidateStack.addArrangedSubview(candidateButton(word.title, first: index == 1) { [weak self] in
+                    self?.applyEnglish(word)
+                })
+            }
         } else {
             candidates = input.isEmpty ? (mode == .zhuyin ? lexicon.suggestions(after: context) : []) : lexicon.candidates(for: input.keys, context: context)
+            let hasWords = !input.isEmpty && !candidates.isEmpty
+            if let digits = input.digitText {
+                candidates.append(LexiconCandidate(word: digits, reading: "", score: -10_000, literal: true))
+            }
             typedLabel.text = input.isEmpty
-                ? (mode == .zhuyin ? "直接連打 · 長按指定注音" : mode == .english ? "英文 QWERTY" : mode == .emoji ? "表情符號 · " + emojiCategories[emojiCategory] : "數字與符號")
-                : candidates.first?.reading ?? "尚無符合字詞 · 長按大鍵指定注音"
+                ? (mode == .zhuyin ? "直接連打 · 長按指定注音" : mode == .english ? "英文 QWERTY" : mode == .emoji ? "表情符號 · " + emojiCategories[emojiCategory] : mode == .numbers ? "數字" : "符號")
+                : candidates.first(where: { !$0.literal })?.reading ?? "尚無符合字詞 · 可選數字或長按大鍵指定注音"
             for (index, candidate) in candidates.enumerated() {
                 let title = candidate.word + (candidate.corrected ? " ≈" : candidate.completesInput ? "…" : "")
-                candidateStack.addArrangedSubview(candidateButton(title, first: index == 0 && !input.isEmpty) { [weak self] in self?.choose(candidate) })
+                candidateStack.addArrangedSubview(candidateButton(title, first: index == 0 && hasWords) { [weak self] in self?.choose(candidate) })
             }
-            if !input.isEmpty && candidates.isEmpty {
+            if !input.isEmpty && !hasWords {
                 candidateStack.addArrangedSubview(candidateButton("清除重打", first: false) { [weak self] in self?.input.clear(); self?.refreshCandidates() })
             }
             for start in stride(from: 0, to: candidates.count, by: 3) {
                 let row = makeRow()
                 for candidate in candidates[start..<min(start + 3, candidates.count)] {
-                    let title = candidate.word + (candidate.corrected ? "\n鄰鍵修正" : candidate.completesInput ? "\n補全" : "")
+                    let title = candidate.word + (candidate.literal ? "\n數字" : candidate.corrected ? "\n鄰鍵修正" : candidate.completesInput ? "\n補全" : "")
                     let button = candidateButton(title, first: false) { [weak self] in self?.choose(candidate) }
                     button.titleLabel?.numberOfLines = 0
                     button.titleLabel?.lineBreakMode = .byWordWrapping
@@ -355,7 +399,7 @@ final class KeyboardViewController: UIInputViewController {
         expandButton.isEnabled = selectedGroup == nil && !candidates.isEmpty
         undoButton.isEnabled = lastCommit != nil && input.isEmpty
         undoButton.alpha = undoButton.isEnabled ? 1 : 0.25
-        spaceButton.setTitle(mode == .numbers ? "0" : input.isEmpty ? "空白" : "選字", for: .normal)
+        spaceButton.setTitle(input.isEmpty ? "空白" : "選字", for: .normal)
     }
     private func append(_ key: ZhuyinKey) {
         selectedGroup = nil
@@ -382,8 +426,8 @@ final class KeyboardViewController: UIInputViewController {
     }
     @discardableResult private func commitComposition() -> Bool {
         guard !input.isEmpty else { return true }
-        guard let candidate = candidates.first else {
-            typedLabel.text = "請先選擇字詞，或刪除後重打"
+        guard let candidate = candidates.first(where: { !$0.literal }) else {
+            typedLabel.text = "請先選擇字詞或數字，或刪除後重打"
             return false
         }
         choose(candidate)
@@ -393,12 +437,83 @@ final class KeyboardViewController: UIInputViewController {
         guard commitComposition() else { return }
         textDocumentProxy.insertText(text)
         lastCommit = nil
+        if mode == .english {
+            if shift == .once { shift = .off; renderKeys() }
+            applyAutoShift()
+        }
         refreshCandidates()
     }
     private func spacePressed() {
-        if mode == .numbers { insertLiteral("0") }
-        else if input.isEmpty { insertLiteral(" ") }
-        else { _ = commitComposition() }
+        guard input.isEmpty else { _ = commitComposition(); return }
+        if mode == .english, Date().timeIntervalSince(lastSpaceTime) < 0.4 {
+            let before = Array(context)
+            if before.count >= 2, before[before.count - 1] == " ", before[before.count - 2].isLetter || before[before.count - 2].isNumber {
+                // Double space becomes ". " like the system keyboard.
+                textDocumentProxy.deleteBackward()
+                textDocumentProxy.insertText(". ")
+                lastSpaceTime = .distantPast
+                lastCommit = nil
+                applyAutoShift()
+                refreshCandidates()
+                return
+            }
+        }
+        lastSpaceTime = Date()
+        insertLiteral(" ")
+    }
+    private func shiftPressed() {
+        let now = Date()
+        if shift == .locked { shift = .off }
+        else if now.timeIntervalSince(lastShiftTap) < 0.35 { shift = .locked }
+        else { shift = shift == .once ? .off : .once }
+        lastShiftTap = now
+        renderKeys()
+    }
+    /// Capitalise the first letter of a sentence unless the field asks for no auto-capitalisation.
+    private func applyAutoShift() {
+        guard mode == .english, shift != .locked else { return }
+        let before = context
+        var should = false
+        if textDocumentProxy.autocapitalizationType != UITextAutocapitalizationType.none {
+            if before.isEmpty || before.hasSuffix("\n") { should = true }
+            else if before.hasSuffix(" ") {
+                let trimmed = before.trimmingCharacters(in: .whitespaces)
+                should = trimmed.hasSuffix(".") || trimmed.hasSuffix("!") || trimmed.hasSuffix("?") || trimmed.hasSuffix("\n")
+            }
+        }
+        let desired: Shift = should ? .once : .off
+        if shift != desired { shift = desired; renderKeys() }
+    }
+    private struct EnglishSuggestion {
+        let title: String
+        let fragmentLength: Int
+        let replacement: String?
+    }
+    private func englishSuggestions() -> [EnglishSuggestion] {
+        let fragment = String(context.reversed().prefix { $0.isASCII && ($0.isLetter || $0 == "'") }.reversed())
+        guard !fragment.isEmpty else { return [] }
+        let range = NSRange(location: 0, length: (fragment as NSString).length)
+        let completions = spellChecker.completions(forPartialWordRange: range, in: fragment, language: "en_US") ?? []
+        var result = [EnglishSuggestion(title: "“" + fragment + "”", fragmentLength: fragment.count, replacement: nil)]
+        for word in completions.prefix(8) where word.lowercased() != fragment.lowercased() {
+            var text = word
+            if fragment.count > 1 && fragment == fragment.uppercased() { text = word.uppercased() }
+            else if fragment.first?.isUppercase == true { text = String(word.prefix(1)).uppercased() + String(word.dropFirst()) }
+            result.append(EnglishSuggestion(title: text, fragmentLength: fragment.count, replacement: text))
+        }
+        return result
+    }
+    private func applyEnglish(_ suggestion: EnglishSuggestion) {
+        if let replacement = suggestion.replacement {
+            for _ in 0..<suggestion.fragmentLength { textDocumentProxy.deleteBackward() }
+            textDocumentProxy.insertText(replacement + " ")
+        } else {
+            textDocumentProxy.insertText(" ")
+        }
+        lastCommit = nil
+        lastSpaceTime = Date.distantPast
+        applyAutoShift()
+        refreshCandidates()
     }
     private func switchMode(_ newMode: Mode) {
         guard commitComposition() else { return }
@@ -406,6 +521,7 @@ final class KeyboardViewController: UIInputViewController {
         if newMode == .zhuyin || newMode == .english { previousLanguage = newMode }
         selectedGroup = nil
         expanded = false
+        if newMode == .english { applyAutoShift() }
         renderKeys()
         refreshCandidates()
     }
@@ -421,7 +537,11 @@ final class KeyboardViewController: UIInputViewController {
     }
     private func backspace() {
         if selectedGroup != nil { selectedGroup = nil }
-        else if !input.deleteLast() { textDocumentProxy.deleteBackward(); lastCommit = nil }
+        else if !input.deleteLast() {
+            textDocumentProxy.deleteBackward()
+            lastCommit = nil
+            if mode == .english { applyAutoShift() }
+        }
         refreshCandidates()
     }
     private func deleteKey() -> UIButton {

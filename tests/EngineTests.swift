@@ -38,6 +38,13 @@ import Darwin
         assert(input.keys == [.group(1), .symbol("ˊ")])
         assert(input.deleteLast() && input.keys == [.group(1)])
         input.clear(); assert(input.isEmpty && !input.deleteLast())
+        var digits = SmartZhuyinInput()
+        assert(digits.digitText == nil)
+        for key in [ZhuyinKey.group(0), .group(4), .group(8)] { digits.append(key) }
+        assert(digits.digitText == "159")
+        digits.append(.symbol("ˇ")); assert(digits.digitText == nil)
+        var specified = SmartZhuyinInput()
+        specified.append(.symbol("ㄋ")); assert(specified.digitText == nil)
         let suite = "NineGridTests-" + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
         let persisted = PhoneticLexicon(text: "藥\tㄧㄠˋ\t700", defaults: defaults)
@@ -62,7 +69,7 @@ import Darwin
             print("Full lexicon rows: \(text.split(whereSeparator: \.isNewline).count), load seconds: \(loaded.timeIntervalSince(started)), maximum query seconds: \(longest), peak MiB: \(Double(usage.ru_maxrss) / 1048576)")
             assert(longest < 1.0, "Typing queries must remain responsive")
         }
-        print("PASS: ambiguous keys, continuous phrases, tones, completion, corrections, contextual learning, persistence, delete")
+        print("PASS: ambiguous keys, continuous phrases, tones, completion, corrections, contextual learning, persistence, delete, digit candidates")
     }
 }
 

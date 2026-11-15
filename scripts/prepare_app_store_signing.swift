@@ -148,6 +148,7 @@ do {
         .write(to: URL(fileURLWithPath: env["RUNNER_TEMP"]! + "/ExportOptions.plist"))
     let projectPath = "project.yml"
     var project = try String(contentsOfFile: projectPath, encoding: .utf8)
+    project = project.replacingOccurrences(of: "CODE_SIGN_STYLE: Automatic", with: "CODE_SIGN_STYLE: Manual\n        CODE_SIGN_IDENTITY: Apple Distribution")
     for (bundle, name) in mapping {
         project = project.replacingOccurrences(of: "PRODUCT_BUNDLE_IDENTIFIER: \(bundle)\n",
             with: "PRODUCT_BUNDLE_IDENTIFIER: \(bundle)\n        PROVISIONING_PROFILE_SPECIFIER: \(name)\n")

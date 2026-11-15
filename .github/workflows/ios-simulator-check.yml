@@ -25,3 +25,19 @@ jobs:
       - name: Build unsigned simulator app and keyboard extension
         run: |
           xcodebuild -project NineGridZhuyin.xcodeproj -scheme NineGridZhuyin -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      - name: Archive unsigned iPhone device build
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project NineGridZhuyin.xcodeproj \
+            -scheme NineGridZhuyin \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/NineGridZhuyin-unsigned.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+          APP="$RUNNER_TEMP/NineGridZhuyin-unsigned.xcarchive/Products/Applications/NineGridZhuyin.app"
+          test -d "$APP"
+          test -d "$APP/PlugIns/NineGridKeyboardExt.appex"
+          echo "Unsigned iPhone archive contains host app and keyboard extension."

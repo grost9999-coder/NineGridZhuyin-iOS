@@ -18,6 +18,8 @@ jobs:
           /tmp/engine_tests
       - name: Optionally expand open-licensed word dictionary
         run: python3 scripts/build_lexicon.py || echo "Retaining offline seed dictionary"
+      - name: Check expanded dictionary response time
+        run: /tmp/engine_tests Keyboard/Resources/lexicon.tsv
       - name: Generate App Store icon
         run: swift scripts/generate_icon.swift
       - name: Generate Xcode project

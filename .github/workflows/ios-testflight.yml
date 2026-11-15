@@ -1,5 +1,9 @@
 name: iPhone archive and TestFlight
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/release-requests/initial-testflight.md"
   workflow_dispatch:
     inputs:
       upload_to_testflight:
@@ -133,7 +137,7 @@ jobs:
           retention-days: 7
 
       - name: Upload signed IPA to TestFlight
-        if: ${{ inputs.upload_to_testflight }}
+        if: ${{ github.event_name == 'push' || inputs.upload_to_testflight }}
         shell: bash
         run: |
           set -euo pipefail

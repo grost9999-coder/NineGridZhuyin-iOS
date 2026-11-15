@@ -46,11 +46,16 @@ jobs:
           umask 077
           mkdir -p "$HOME/.appstoreconnect/private_keys"
           printf '%s\n' "$ASC_API_KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
-          if ! grep -q -- "BEGIN PRIVATE KEY" "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"; then
-            echo "::error::ASC_API_KEY_P8 must contain the text of your .p8 key, not its filename."
+          KEY="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          if ! grep -q -- "-----BEGIN PRIVATE KEY-----" "$KEY" || ! grep -q -- "-----END PRIVATE KEY-----" "$KEY"; then
+            echo "::error::ASC_API_KEY_P8 is not a complete Apple .p8 private key. Open the AuthKey_*.p8 file as plain text on your iPhone, copy ALL text including BEGIN/END PRIVATE KEY lines, and update ONLY the ASC_API_KEY_P8 repository secret. Never paste the key into chat or code."
             exit 1
           fi
-          echo "Apple signing key prepared (contents are never printed)."
+          if ! openssl pkey -in "$KEY" -noout > /dev/null 2>&1; then
+            echo "::error::ASC_API_KEY_P8 contains invalid PEM key data. Recopy the whole .p8 text with the original line breaks into the GitHub Secret."
+            exit 1
+          fi
+          echo "Apple signing key format verified (contents are never printed)."
 
       - name: Confirm Xcode 26 or newer
         shell: bash

@@ -111,7 +111,7 @@ for check in checks {
            candidate.allSatisfy({ $0.isASCII && ($0.isUppercase || $0.isNumber || $0 == "_" || $0 == "-") }) {
             code = candidate
         }
-        print("FAIL: \\(check.title) - HTTP 401 (Apple error code: \\(code)). Verify Team API Key ID, the matching .p8 file and team Issuer ID.")
+        print("FAIL: \(check.title) - HTTP 401 (Apple error code: \(code)). Verify Team API Key ID, the matching .p8 file and team Issuer ID.")
         failures += 1
     } else if status == 403 {
         print("FAIL: \(check.title) - HTTP 403: key lacks access to this resource; review team key role and Apple Developer signing privileges")

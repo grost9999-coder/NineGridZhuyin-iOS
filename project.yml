@@ -9,9 +9,6 @@ settings:
     DEVELOPMENT_TEAM: ""
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
-  configs:
-    Release:
-      CODE_SIGN_IDENTITY: "Apple Distribution"
 targets:
   NineGridZhuyin:
     type: application

@@ -57,6 +57,12 @@ jobs:
           fi
           echo "Apple signing key format verified (contents are never printed)."
 
+      - name: Verify Apple API key and provisioning access before build
+        shell: bash
+        env:
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+        run: swift scripts/check_apple_signing.swift
+
       - name: Confirm Xcode 26 or newer
         shell: bash
         run: |
